@@ -1,0 +1,179 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Posterity — Time Capsule Resolution App.
+  Stores life resolutions and sends periodic email check-ins.
+
+Parameters:
+  SenderEmail:
+    Type: String
+    Description: Verified SES email address to send check-in emails from
+    Default: noreply@example.com
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - prod
+
+Globals:
+  Function:
+    Runtime: python3.12
+    MemorySize: 128
+    Timeout: 30
+    Architectures:
+      - arm64
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref CapsuleTable
+        SENDER_EMAIL: !Ref SenderEmail
+
+Resources:
+
+  # ─────────────────────────────────────────────
+  # DynamoDB Table
+  # ─────────────────────────────────────────────
+  CapsuleTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "Posterity-TimeCapsules-${Stage}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: capsuleId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: nextCheckIn
+          AttributeType: S
+      KeySchema:
+        - AttributeName: capsuleId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusNextCheckInIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: nextCheckIn
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: Posterity
+
+  # ─────────────────────────────────────────────
+  # API Gateway
+  # ─────────────────────────────────────────────
+  PosterityApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Stage
+      Cors:
+        AllowMethods: "'POST,OPTIONS'"
+        AllowHeaders: "'Content-Type'"
+        AllowOrigin: "'*'"
+      EndpointConfiguration:
+        Type: REGIONAL
+      MethodSettings:
+        - ResourcePath: "/*"
+          HttpMethod: "*"
+          ThrottlingRateLimit: 2
+          ThrottlingBurstLimit: 5
+
+  # ─────────────────────────────────────────────
+  # Lambda: Ingest Function
+  # ─────────────────────────────────────────────
+  IngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "Posterity-Ingest-${Stage}"
+      Handler: handler.lambda_handler
+      CodeUri: functions/ingest/
+      Timeout: 10
+      Events:
+        CreateCapsule:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PosterityApi
+            Path: /capsules
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CapsuleTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
+
+  # ─────────────────────────────────────────────
+  # Lambda: Mailer Function
+  # ─────────────────────────────────────────────
+  MailerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "Posterity-Mailer-${Stage}"
+      Handler: handler.lambda_handler
+      CodeUri: functions/mailer/
+      Timeout: 60
+      Events:
+        DailyCheckIn:
+          Type: Schedule
+          Properties:
+            Schedule: "cron(0 8 * * ? *)"
+            Description: "Daily check for due check-ins (8 AM UTC)"
+            Enabled: true
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CapsuleTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
+
+  # ─────────────────────────────────────────────
+  # S3 Bucket: Static Frontend
+  # ─────────────────────────────────────────────
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "posterity-frontend-${AWS::AccountId}-${Stage}"
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${FrontendBucket.Arn}/*"
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${PosterityApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+  FrontendUrl:
+    Description: S3 static website URL
+    Value: !GetAtt FrontendBucket.WebsiteURL
+  FrontendBucketName:
+    Description: Name of the S3 bucket for frontend deployment
+    Value: !Ref FrontendBucket
+  TableName:
+    Description: DynamoDB table name
+    Value: !Ref CapsuleTable

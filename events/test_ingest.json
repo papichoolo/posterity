@@ -1,0 +1,4 @@
+{
+  "httpMethod": "POST",
+  "body": "{\"name\": \"Sourav\", \"email\": \"sourav@example.com\", \"resolutions\": [\"Read 50 books this year\", \"Run a half-marathon\", \"Learn to cook 10 new recipes\", \"Meditate daily for 15 minutes\"], \"checkInDays\": 180, \"planDurationDays\": 730}"
+}
