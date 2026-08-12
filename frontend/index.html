@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Posterity</title>
+    <link rel="icon" type="image/png" href="static/icon-removebg-preview.png">
+    <link rel="shortcut icon" type="image/png" href="static/icon-removebg-preview.png">
     <style>
         @font-face {
             font-family: 'W95FA';
@@ -18,11 +20,9 @@
             font-size: 12px;
             margin: 0;
             padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             min-height: 100vh;
             color: #000;
+            overflow-x: hidden;
         }
 
         .window {
@@ -34,6 +34,10 @@
             padding: 2px;
             width: 500px;
             box-shadow: 2px 2px 0px rgba(0,0,0,0.5);
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
         }
 
         .title-bar {
@@ -44,6 +48,10 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            cursor: move;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
         }
         
         .title-bar-text {
@@ -196,6 +204,62 @@
             margin-bottom: 15px;
         }
 
+        /* Mobile — keep Win95 look, just reflow */
+        @media (max-width: 640px) {
+            body {
+                padding: 8px;
+            }
+            .window {
+                position: static;
+                transform: none;
+                width: 100%;
+                max-width: 100%;
+                box-sizing: border-box;
+                margin: 0 auto;
+            }
+            .title-bar {
+                cursor: default;
+            }
+            .window-body {
+                padding: 8px;
+            }
+            fieldset {
+                padding: 8px;
+            }
+            .field-row {
+                flex-wrap: wrap;
+                align-items: flex-start;
+            }
+            .field-row label {
+                width: 100%;
+                margin-bottom: 4px;
+            }
+            input[type="text"], input[type="email"] {
+                width: 100%;
+            }
+            .resolution-item {
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+            .resolution-item input {
+                width: 100%;
+                min-width: 0;
+                margin-right: 0;
+            }
+            .action-buttons {
+                justify-content: stretch;
+                flex-wrap: wrap;
+            }
+            .action-buttons button {
+                flex: 1;
+                min-width: 120px;
+            }
+            .msg-box {
+                width: calc(100% - 24px);
+                max-width: 350px;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -273,9 +337,85 @@
 
     <script>
         // ── CONFIGURE THIS after `sam deploy` ──
-        const API_URL = 'https://fn1b9eweih.execute-api.eu-north-1.amazonaws.com/prod'; 
+        const API_URL = 'https://fn1b9eweih.execute-api.eu-north-1.amazonaws.com/prod';
 
-        
+        // Drag the window by its title bar (desktop only)
+        (function initWindowDrag() {
+            const win = document.querySelector('.window');
+            const bar = win.querySelector('.title-bar');
+            let dragging = false;
+            let offsetX = 0, offsetY = 0;
+
+            const isMobile = () => window.matchMedia('(max-width: 640px)').matches;
+
+            function begin(clientX, clientY, target) {
+                if (isMobile()) return;
+                if (target.closest('.title-bar-controls')) return;
+                const rect = win.getBoundingClientRect();
+                win.style.transform = 'none';
+                win.style.left = rect.left + window.scrollX + 'px';
+                win.style.top = rect.top + window.scrollY + 'px';
+                offsetX = clientX - rect.left;
+                offsetY = clientY - rect.top;
+                dragging = true;
+                document.body.style.userSelect = 'none';
+            }
+
+            function move(clientX, clientY) {
+                if (!dragging) return;
+                const winRect = win.getBoundingClientRect();
+                let x = clientX - offsetX;
+                let y = clientY - offsetY;
+                // Keep the title bar reachable within the viewport
+                const minX = -winRect.width + 60;
+                const minY = 0;
+                const maxX = window.innerWidth - 60;
+                const maxY = window.innerHeight - 24;
+                if (x < minX) x = minX;
+                if (y < minY) y = minY;
+                if (x > maxX) x = maxX;
+                if (y > maxY) y = maxY;
+                win.style.left = (x + window.scrollX) + 'px';
+                win.style.top = (y + window.scrollY) + 'px';
+            }
+
+            function end() {
+                dragging = false;
+                document.body.style.userSelect = '';
+            }
+
+            bar.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                begin(e.clientX, e.clientY, e.target);
+            });
+            document.addEventListener('mousemove', (e) => move(e.clientX, e.clientY));
+            document.addEventListener('mouseup', end);
+
+            bar.addEventListener('touchstart', (e) => {
+                if (e.touches.length !== 1) return;
+                const t = e.touches[0];
+                begin(t.clientX, t.clientY, e.target);
+            }, { passive: true });
+            document.addEventListener('touchmove', (e) => {
+                if (!dragging || e.touches.length !== 1) return;
+                const t = e.touches[0];
+                move(t.clientX, t.clientY);
+                e.preventDefault();
+            }, { passive: false });
+            document.addEventListener('touchend', end);
+            document.addEventListener('touchcancel', end);
+
+            // If the viewport shrinks past the mobile breakpoint, clear inline positioning
+            // so the CSS mobile layout takes over cleanly.
+            window.addEventListener('resize', () => {
+                if (isMobile()) {
+                    win.style.left = '';
+                    win.style.top = '';
+                    win.style.transform = '';
+                }
+            });
+        })();
+
         function showModal(title, text, isError) {
             document.getElementById('msgTitle').textContent = title;
             document.getElementById('msgText').textContent = text;
