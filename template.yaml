@@ -7,8 +7,12 @@ Description: >
 Parameters:
   SenderEmail:
     Type: String
-    Description: Verified SES email address to send check-in emails from
-    Default: noreply@example.com
+    Description: Sender email address (e.g. Posterity <noreply@posterity.work>)
+    Default: Posterity <noreply@posterity.work>
+  ResendApiKey:
+    Type: String
+    NoEcho: true
+    Description: Resend API key starting with re_
   Stage:
     Type: String
     Default: prod
@@ -27,6 +31,7 @@ Globals:
       Variables:
         TABLE_NAME: !Ref CapsuleTable
         SENDER_EMAIL: !Ref SenderEmail
+        RESEND_API_KEY: !Ref ResendApiKey
 
 Resources:
 
@@ -102,12 +107,6 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref CapsuleTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - ses:SendEmail
-                - ses:SendRawEmail
-              Resource: "*"
 
   # ─────────────────────────────────────────────
   # Lambda: Mailer Function
@@ -129,12 +128,6 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref CapsuleTable
-        - Statement:
-            - Effect: Allow
-              Action:
-                - ses:SendEmail
-                - ses:SendRawEmail
-              Resource: "*"
 
   # ─────────────────────────────────────────────
   # S3 Bucket: Static Frontend

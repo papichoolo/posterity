@@ -22,13 +22,10 @@ S3 Static Site → API Gateway → Lambda (ingest) → DynamoDB
 
 ## Deployment
 
-### 1. Verify your sender email in SES
+### 1. Configure Resend
 
-```bash
-aws ses verify-email-identity --email-address your-email@example.com --region us-east-1
-```
-
-Check your inbox and click the verification link.
+1. Add your domain (`posterity.work`) in [Resend](https://resend.com/domains) and add the DNS records to Cloudflare.
+2. Generate an API Key in [Resend API Keys](https://resend.com/api-keys).
 
 ### 2. Build and deploy
 
@@ -45,8 +42,9 @@ sam deploy
 
 During guided deploy, you'll be asked for:
 - **Stack Name**: `posterity` (or any name)
-- **AWS Region**: `us-east-1` (or your preferred region)
-- **SenderEmail**: Your verified SES email address
+- **AWS Region**: `eu-north-1` (or your preferred region)
+- **SenderEmail**: `Posterity <noreply@posterity.work>`
+- **ResendApiKey**: Your Resend API key (`re_...`)
 - **Stage**: `prod`
 
 ### 3. Note the API URL

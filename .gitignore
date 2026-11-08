@@ -1,6 +1,7 @@
 # ── AWS SAM ──────────────────────────────────────────────────────────────────
 .aws-sam/
 samconfig.toml          # contains profile/email – add back if you want it tracked
+packaged.yaml
 
 # ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/

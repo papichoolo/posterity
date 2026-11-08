@@ -16,6 +16,11 @@
         
         body {
             background-color: #008080; /* Win95 Teal */
+            background-image: url('media/dali.jpg');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-attachment: fixed;
+            background-size: 50% auto;
             font-family: 'W95FA', "MS Sans Serif", "Arial", sans-serif;
             font-size: 12px;
             margin: 0;
@@ -258,8 +263,104 @@
                 width: calc(100% - 24px);
                 max-width: 350px;
             }
+            .media-player {
+                bottom: 8px;
+                right: 8px;
+                left: 8px;
+                width: auto;
+            }
         }
 
+        /* ── Retro Windows 95 Media Player ── */
+        .media-player {
+            position: fixed;
+            bottom: 14px;
+            right: 14px;
+            background-color: #c0c0c0;
+            border-top: 2px solid #fff;
+            border-left: 2px solid #fff;
+            border-right: 2px solid #000;
+            border-bottom: 2px solid #000;
+            padding: 2px;
+            width: 250px;
+            box-shadow: 2px 2px 0px rgba(0,0,0,0.5);
+            z-index: 800;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .media-player .player-title-bar {
+            background-color: #000080;
+            color: white;
+            padding: 2px 4px;
+            font-size: 11px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: move;
+            touch-action: none;
+        }
+        .media-player .player-title-bar button {
+            background: #c0c0c0;
+            border-top: 1px solid #fff;
+            border-left: 1px solid #fff;
+            border-right: 1px solid #000;
+            border-bottom: 1px solid #000;
+            font-size: 9px;
+            font-weight: bold;
+            line-height: 9px;
+            padding: 1px 4px;
+            cursor: pointer;
+            margin-left: 2px;
+            font-family: 'W95FA', "MS Sans Serif", sans-serif;
+        }
+        .media-player .player-title-bar button:active {
+            border-top: 1px solid #000;
+            border-left: 1px solid #000;
+            border-right: 1px solid #fff;
+            border-bottom: 1px solid #fff;
+        }
+        .media-player .player-body {
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .media-player .player-display {
+            background-color: #000;
+            color: #00ff00;
+            font-family: monospace;
+            padding: 4px 6px;
+            font-size: 11px;
+            border-top: 1px solid #808080;
+            border-left: 1px solid #808080;
+            border-right: 1px solid #fff;
+            border-bottom: 1px solid #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .media-player .player-status-line {
+            display: flex;
+            justify-content: space-between;
+            font-family: monospace;
+            font-size: 10px;
+            color: #111;
+            padding: 0 1px;
+        }
+        .media-player .player-controls {
+            display: flex;
+            gap: 2px;
+            justify-content: space-between;
+        }
+        .media-player .player-controls button {
+            flex: 1;
+            padding: 3px 2px;
+            font-size: 10px;
+            cursor: pointer;
+            text-align: center;
+            font-family: 'W95FA', "MS Sans Serif", sans-serif;
+        }
     </style>
 </head>
 <body>
@@ -335,85 +436,133 @@
         </div>
     </div>
 
+    <!-- Message Box Modal -->
+    <div id="msgModal" class="modal-overlay">
+        <div class="msg-box">
+            <div class="title-bar">
+                <div class="title-bar-text" id="msgTitle">Posterity</div>
+                <div class="title-bar-controls">
+                    <button aria-label="Close" onclick="closeModal()">x</button>
+                </div>
+            </div>
+            <div class="msg-box-content">
+                <div id="msgIcon" class="msg-icon">ℹ️</div>
+                <p id="msgText" style="margin-bottom: 20px; font-size: 13px; line-height: 1.4;"></p>
+                <button onclick="closeModal()" style="width: 80px; padding: 6px;">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Windows 95 Media Player -->
+    <div class="media-player" id="mediaPlayer">
+        <audio id="bgAudio" preload="auto" playsinline></audio>
+        <div class="player-title-bar" id="playerTitleBar">
+            <span style="display: flex; align-items: center; gap: 4px;">&#127925; CD Player</span>
+            <button type="button" id="playerMinBtn" title="Minimize / Restore">_</button>
+        </div>
+        <div class="player-body" id="playerBody">
+            <div class="player-display" id="trackDisplay">[1/3] Four Tet - Last Song</div>
+            <div class="player-status-line">
+                <span id="playerStatus">[Ready]</span>
+                <span id="playerTime">00:00 / --:--</span>
+            </div>
+            <div class="player-controls">
+                <button type="button" id="prevTrackBtn" title="Previous Track">&#9198; Prev</button>
+                <button type="button" id="playPauseBtn" title="Play / Pause">&#9654; Play</button>
+                <button type="button" id="stopBtn" title="Stop Track">&#9209; Stop</button>
+                <button type="button" id="nextTrackBtn" title="Next Track">&#9197; Next</button>
+                <button type="button" id="muteBtn" title="Mute / Unmute">&#128266;</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // ── CONFIGURE THIS after `sam deploy` ──
         const API_URL = 'https://fn1b9eweih.execute-api.eu-north-1.amazonaws.com/prod';
 
-        // Drag the window by its title bar (desktop only)
+        // Drag windows by their title bar (desktop only)
         (function initWindowDrag() {
-            const win = document.querySelector('.window');
-            const bar = win.querySelector('.title-bar');
-            let dragging = false;
-            let offsetX = 0, offsetY = 0;
-
             const isMobile = () => window.matchMedia('(max-width: 640px)').matches;
 
-            function begin(clientX, clientY, target) {
-                if (isMobile()) return;
-                if (target.closest('.title-bar-controls')) return;
-                const rect = win.getBoundingClientRect();
-                win.style.transform = 'none';
-                win.style.left = rect.left + window.scrollX + 'px';
-                win.style.top = rect.top + window.scrollY + 'px';
-                offsetX = clientX - rect.left;
-                offsetY = clientY - rect.top;
-                dragging = true;
-                document.body.style.userSelect = 'none';
-            }
+            function makeDraggable(win, bar) {
+                if (!win || !bar) return;
+                let dragging = false;
+                let offsetX = 0, offsetY = 0;
 
-            function move(clientX, clientY) {
-                if (!dragging) return;
-                const winRect = win.getBoundingClientRect();
-                let x = clientX - offsetX;
-                let y = clientY - offsetY;
-                // Keep the title bar reachable within the viewport
-                const minX = -winRect.width + 60;
-                const minY = 0;
-                const maxX = window.innerWidth - 60;
-                const maxY = window.innerHeight - 24;
-                if (x < minX) x = minX;
-                if (y < minY) y = minY;
-                if (x > maxX) x = maxX;
-                if (y > maxY) y = maxY;
-                win.style.left = (x + window.scrollX) + 'px';
-                win.style.top = (y + window.scrollY) + 'px';
-            }
-
-            function end() {
-                dragging = false;
-                document.body.style.userSelect = '';
-            }
-
-            bar.addEventListener('mousedown', (e) => {
-                if (e.button !== 0) return;
-                begin(e.clientX, e.clientY, e.target);
-            });
-            document.addEventListener('mousemove', (e) => move(e.clientX, e.clientY));
-            document.addEventListener('mouseup', end);
-
-            bar.addEventListener('touchstart', (e) => {
-                if (e.touches.length !== 1) return;
-                const t = e.touches[0];
-                begin(t.clientX, t.clientY, e.target);
-            }, { passive: true });
-            document.addEventListener('touchmove', (e) => {
-                if (!dragging || e.touches.length !== 1) return;
-                const t = e.touches[0];
-                move(t.clientX, t.clientY);
-                e.preventDefault();
-            }, { passive: false });
-            document.addEventListener('touchend', end);
-            document.addEventListener('touchcancel', end);
-
-            // If the viewport shrinks past the mobile breakpoint, clear inline positioning
-            // so the CSS mobile layout takes over cleanly.
-            window.addEventListener('resize', () => {
-                if (isMobile()) {
-                    win.style.left = '';
-                    win.style.top = '';
-                    win.style.transform = '';
+                function begin(clientX, clientY, target) {
+                    if (isMobile()) return;
+                    if (target.closest('button, input, select, .title-bar-controls')) return;
+                    const rect = win.getBoundingClientRect();
+                    win.style.transform = 'none';
+                    win.style.bottom = 'auto';
+                    win.style.right = 'auto';
+                    win.style.left = (rect.left + window.scrollX) + 'px';
+                    win.style.top = (rect.top + window.scrollY) + 'px';
+                    offsetX = clientX - rect.left;
+                    offsetY = clientY - rect.top;
+                    dragging = true;
+                    document.body.style.userSelect = 'none';
                 }
-            });
+
+                function move(clientX, clientY) {
+                    if (!dragging) return;
+                    const winRect = win.getBoundingClientRect();
+                    let x = clientX - offsetX;
+                    let y = clientY - offsetY;
+                    const minX = -winRect.width + 60;
+                    const minY = 0;
+                    const maxX = window.innerWidth - 60;
+                    const maxY = window.innerHeight - 24;
+                    if (x < minX) x = minX;
+                    if (y < minY) y = minY;
+                    if (x > maxX) x = maxX;
+                    if (y > maxY) y = maxY;
+                    win.style.left = (x + window.scrollX) + 'px';
+                    win.style.top = (y + window.scrollY) + 'px';
+                }
+
+                function end() {
+                    dragging = false;
+                    document.body.style.userSelect = '';
+                }
+
+                bar.addEventListener('mousedown', (e) => {
+                    if (e.button !== 0) return;
+                    begin(e.clientX, e.clientY, e.target);
+                });
+                document.addEventListener('mousemove', (e) => move(e.clientX, e.clientY));
+                document.addEventListener('mouseup', end);
+
+                bar.addEventListener('touchstart', (e) => {
+                    if (e.touches.length !== 1) return;
+                    const t = e.touches[0];
+                    begin(t.clientX, t.clientY, e.target);
+                }, { passive: true });
+                document.addEventListener('touchmove', (e) => {
+                    if (!dragging || e.touches.length !== 1) return;
+                    const t = e.touches[0];
+                    move(t.clientX, t.clientY);
+                    e.preventDefault();
+                }, { passive: false });
+                document.addEventListener('touchend', end);
+                document.addEventListener('touchcancel', end);
+
+                window.addEventListener('resize', () => {
+                    if (isMobile()) {
+                        win.style.left = '';
+                        win.style.top = '';
+                        win.style.bottom = '';
+                        win.style.right = '';
+                        win.style.transform = '';
+                    }
+                });
+            }
+
+            const mainWin = document.querySelector('.window');
+            if (mainWin) makeDraggable(mainWin, mainWin.querySelector('.title-bar'));
+
+            const playerWin = document.querySelector('.media-player');
+            if (playerWin) makeDraggable(playerWin, playerWin.querySelector('.player-title-bar'));
         })();
 
         function showModal(title, text, isError) {
@@ -508,24 +657,228 @@
                 submitBtn.textContent = 'Seal Message';
             }
         });
+
+        // ── Background Audio Player (Win95 Media Player) ──
+        const PLAYLIST = [
+            {
+                title: "Four Tet - Last Song",
+                sources: [
+                    "media/songs/FourTetLastSong.wav",
+                    "songs/FourTetLastSong.wav",
+                    "static/songs/FourTetLastSong.wav"
+                ]
+            },
+            {
+                title: "rukiawaa - AWΛSUKI電霊 (Full Album)",
+                sources: [
+                    "media/songs/rukiawaa.mp3",
+                    "songs/rukiawaa.mp3",
+                    "static/songs/rukiawaa.mp3",
+                    encodeURI("media/songs/rukiawaa AWΛSUKI電霊 ᶠᵘˡˡ ᵃˡᵇᵘᵐ.mp3"),
+                    encodeURI("songs/rukiawaa AWΛSUKI電霊 ᶠᵘˡˡ ᵃˡᵇᵘᵐ.mp3")
+                ]
+            },
+            {
+                title: "Four Tet - ⣎⡇ꉺლ",
+                sources: [
+                    "media/songs/four_tet_track3.mp3",
+                    "songs/four_tet_track3.mp3",
+                    "static/songs/four_tet_track3.mp3",
+                    encodeURI("media/songs/⣎⡇ꉺლ༽இ•̛)ྀ◞ ༎ຶ ༽ৣৢ؞ৢ؞ؖ ꉺლ - ʅ͡͡͡͡͡͡͡͡͡͡͡(̸̢̛̼̞̭͋ͅ)̸͚̰͛̔̾̀̿͒͂_̴͓̞̑̌̂̆̊͋̀_̸͎̟̯̂̓̌ ҉ ͡ ͞ ͞ ͞ ҉● ࿀ ● ࿀ ●.mp3"),
+                    encodeURI("songs/⣎⡇ꉺლ༽இ•̛)ྀ◞ ༎ຶ ༽ৣৢ؞ৢ؞ؖ ꉺლ - ʅ͡͡͡͡͡͡͡͡͡͡͡(̸̢̛̼̞̭͋ͅ)̸͚̰͛̔̾̀̿͒͂_̴͓̞̑̌̂̆̊͋̀_̸͎̟̯̂̓̌ ҉ ͡ ͞ ͞ ͞ ҉● ࿀ ● ࿀ ●.mp3")
+                ]
+            }
+        ];
+
+        let currentTrackIndex = 0;
+        let currentSourceIndex = 0;
+        let isPlayPending = false;
+        let userWantsPlay = false;
+
+        const bgAudio = document.getElementById("bgAudio");
+        const trackDisplay = document.getElementById("trackDisplay");
+        const playPauseBtn = document.getElementById("playPauseBtn");
+        const stopBtn = document.getElementById("stopBtn");
+        const playerStatus = document.getElementById("playerStatus");
+        const playerTime = document.getElementById("playerTime");
+        const muteBtn = document.getElementById("muteBtn");
+        const playerMinBtn = document.getElementById("playerMinBtn");
+        const playerBody = document.getElementById("playerBody");
+
+        bgAudio.volume = 1.0;
+        bgAudio.muted = false;
+
+        function formatTime(seconds) {
+            if (isNaN(seconds) || !isFinite(seconds)) return "--:--";
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return (mins < 10 ? "0" : "") + mins + ":" + (secs < 10 ? "0" : "") + secs;
+        }
+
+        function updateTrackUI() {
+            const track = PLAYLIST[currentTrackIndex];
+            if (track) {
+                const label = `[${currentTrackIndex + 1}/${PLAYLIST.length}] ${track.title}`;
+                trackDisplay.textContent = label;
+                trackDisplay.title = label;
+            }
+        }
+
+        function updateTimeDisplay() {
+            const current = formatTime(bgAudio.currentTime);
+            const total = formatTime(bgAudio.duration);
+            playerTime.textContent = `${current} / ${total}`;
+        }
+
+        function loadTrack(trackIdx, srcIdx = 0, shouldPlay = false) {
+            currentTrackIndex = (trackIdx + PLAYLIST.length) % PLAYLIST.length;
+            currentSourceIndex = srcIdx;
+            const track = PLAYLIST[currentTrackIndex];
+            const src = track.sources[currentSourceIndex] || track.sources[0];
+
+            bgAudio.src = src;
+            updateTrackUI();
+            updateTimeDisplay();
+            playerStatus.textContent = shouldPlay ? "[Loading...]" : "[Ready]";
+
+            if (shouldPlay) {
+                playMusic();
+            }
+        }
+
+        function playMusic() {
+            userWantsPlay = true;
+            if (isPlayPending) return;
+
+            isPlayPending = true;
+            playerStatus.textContent = "[Loading...]";
+
+            bgAudio.play().then(() => {
+                isPlayPending = false;
+                playPauseBtn.innerHTML = "&#10074;&#10074; Pause";
+                playerStatus.textContent = "[Playing]";
+                updateTimeDisplay();
+            }).catch((err) => {
+                isPlayPending = false;
+                console.warn("Audio play() notice:", err);
+                if (err.name === "NotAllowedError") {
+                    playerStatus.textContent = "[Click Play]";
+                    playPauseBtn.innerHTML = "&#9654; Play";
+                } else {
+                    tryFallbackSource();
+                }
+            });
+        }
+
+        function tryFallbackSource() {
+            const track = PLAYLIST[currentTrackIndex];
+            if (currentSourceIndex + 1 < track.sources.length) {
+                console.log("Trying fallback source for", track.title);
+                loadTrack(currentTrackIndex, currentSourceIndex + 1, userWantsPlay);
+            } else {
+                playerStatus.textContent = "[Error]";
+                playPauseBtn.innerHTML = "&#9654; Play";
+            }
+        }
+
+        function pauseMusic() {
+            userWantsPlay = false;
+            bgAudio.pause();
+            playPauseBtn.innerHTML = "&#9654; Play";
+            playerStatus.textContent = "[Paused]";
+        }
+
+        function stopMusic() {
+            userWantsPlay = false;
+            bgAudio.pause();
+            bgAudio.currentTime = 0;
+            playPauseBtn.innerHTML = "&#9654; Play";
+            playerStatus.textContent = "[Stopped]";
+            updateTimeDisplay();
+        }
+
+        playPauseBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (bgAudio.paused) {
+                playMusic();
+            } else {
+                pauseMusic();
+            }
+        });
+
+        stopBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            stopMusic();
+        });
+
+        document.getElementById("nextTrackBtn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            loadTrack(currentTrackIndex + 1, 0, true);
+        });
+
+        document.getElementById("prevTrackBtn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            loadTrack(currentTrackIndex - 1, 0, true);
+        });
+
+        muteBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            bgAudio.muted = !bgAudio.muted;
+            muteBtn.textContent = bgAudio.muted ? "🔇" : "🔊";
+        });
+
+        bgAudio.addEventListener("timeupdate", updateTimeDisplay);
+        bgAudio.addEventListener("loadedmetadata", updateTimeDisplay);
+        bgAudio.addEventListener("playing", () => {
+            playPauseBtn.innerHTML = "&#10074;&#10074; Pause";
+            playerStatus.textContent = "[Playing]";
+        });
+        bgAudio.addEventListener("pause", () => {
+            if (!isPlayPending) {
+                playPauseBtn.innerHTML = "&#9654; Play";
+                if (playerStatus.textContent === "[Playing]") {
+                    playerStatus.textContent = "[Paused]";
+                }
+            }
+        });
+
+        bgAudio.addEventListener("error", (e) => {
+            console.warn("bgAudio error:", bgAudio.error, "on src:", bgAudio.src);
+            tryFallbackSource();
+        });
+
+        bgAudio.addEventListener("ended", () => {
+            loadTrack(currentTrackIndex + 1, 0, true);
+        });
+
+        // Minimize / Restore shade toggle
+        if (playerMinBtn && playerBody) {
+            playerMinBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const isHidden = playerBody.style.display === "none";
+                playerBody.style.display = isHidden ? "flex" : "none";
+                playerMinBtn.textContent = isHidden ? "_" : "□";
+            });
+        }
+
+        // Browser Autoplay Policy: Automatically start audio on first user gesture outside the player
+        function handleFirstInteraction(e) {
+            if (e && e.target && e.target.closest('#mediaPlayer')) {
+                return;
+            }
+            if (bgAudio.paused && !userWantsPlay) {
+                playMusic();
+            }
+            window.removeEventListener("click", handleFirstInteraction);
+            window.removeEventListener("keydown", handleFirstInteraction);
+            window.removeEventListener("touchstart", handleFirstInteraction);
+        }
+        window.addEventListener("click", handleFirstInteraction);
+        window.addEventListener("keydown", handleFirstInteraction);
+        window.addEventListener("touchstart", handleFirstInteraction);
+
+        // Initialize first track
+        loadTrack(0, 0, false);
     </script>
-
-    <!-- Message Box Modal -->
-    <div id="msgModal" class="modal-overlay">
-        <div class="msg-box">
-            <div class="title-bar">
-                <div class="title-bar-text" id="msgTitle">Posterity</div>
-                <div class="title-bar-controls">
-                    <button aria-label="Close" onclick="closeModal()">x</button>
-                </div>
-            </div>
-            <div class="msg-box-content">
-                <div id="msgIcon" class="msg-icon">ℹ️</div>
-                <p id="msgText" style="margin-bottom: 20px; font-size: 13px; line-height: 1.4;"></p>
-                <button onclick="closeModal()" style="width: 80px; padding: 6px;">OK</button>
-            </div>
-        </div>
-    </div>
-
 </body>
 </html>

@@ -2,6 +2,8 @@ import json
 import uuid
 import os
 import re
+import urllib.request
+import urllib.error
 from datetime import datetime, timedelta, timezone
 
 import boto3
@@ -12,9 +14,9 @@ logger.setLevel(logging.INFO)
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["TABLE_NAME"])
-ses = boto3.client("ses")
 
 SENDER_EMAIL = os.environ["SENDER_EMAIL"]
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
 # ── Validation constants ──────────────────────────────────
 MIN_CHECKIN_DAYS = 7
@@ -288,24 +290,42 @@ def _build_welcome_email_html(capsule: dict) -> str:
 
 
 def _send_welcome_email(capsule: dict) -> None:
-    """Send the initial confirmation email when a message is first sealed."""
+    """Send the initial confirmation email when a message is first sealed via Resend."""
     name = capsule["name"]
     email = capsule["email"]
     subject = f"Your message has been sealed for posterity, {name}."
     html_body = _build_welcome_email_html(capsule)
 
+    if not RESEND_API_KEY:
+        logger.error("RESEND_API_KEY is not configured in environment variables")
+        return
+
+    url = "https://api.resend.com/emails"
+    payload = json.dumps({
+        "from": SENDER_EMAIL,
+        "to": [email],
+        "subject": subject,
+        "html": html_body,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {RESEND_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "Posterity/1.0",
+        },
+        method="POST",
+    )
+
     try:
-        ses.send_email(
-            Source=SENDER_EMAIL,
-            Destination={"ToAddresses": [email]},
-            Message={
-                "Subject": {"Data": subject, "Charset": "UTF-8"},
-                "Body": {
-                    "Html": {"Data": html_body, "Charset": "UTF-8"},
-                },
-            },
-        )
-        logger.info(f"Welcome email sent to {email} for message {capsule['capsuleId']}")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp_body = json.loads(resp.read().decode("utf-8"))
+            logger.info(f"Welcome email sent via Resend to {email} for message {capsule['capsuleId']} (id: {resp_body.get('id')})")
+    except urllib.error.HTTPError as e:
+        error_content = e.read().decode("utf-8")
+        logger.error(f"Resend HTTP error {e.code} sending welcome email to {email}: {error_content}")
     except Exception as e:
         # Log but don't fail message creation — the data is already saved
         logger.error(f"Failed to send welcome email to {email}: {e}")

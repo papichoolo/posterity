@@ -1,6 +1,8 @@
 import json
 import os
 import logging
+import urllib.request
+import urllib.error
 from datetime import datetime, timedelta, timezone
 
 import boto3
@@ -11,9 +13,9 @@ logger.setLevel(logging.INFO)
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["TABLE_NAME"])
-ses = boto3.client("ses")
 
 SENDER_EMAIL = os.environ["SENDER_EMAIL"]
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 GSI_NAME = "StatusNextCheckInIndex"
 
 
@@ -175,21 +177,44 @@ def _build_email_html(capsule: dict, is_final: bool = False) -> str:
 
 
 def _send_email(to_email: str, subject: str, html_body: str) -> bool:
-    """Send an email via SES. Returns True on success."""
+    """Send an email via Resend REST API. Returns True on success."""
+    if not RESEND_API_KEY:
+        logger.error("RESEND_API_KEY is not configured in environment variables")
+        return False
+
+    url = "https://api.resend.com/emails"
+    payload = json.dumps({
+        "from": SENDER_EMAIL,
+        "to": [to_email],
+        "subject": subject,
+        "html": html_body,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {RESEND_API_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "Posterity/1.0",
+        },
+        method="POST",
+    )
+
     try:
-        ses.send_email(
-            Source=SENDER_EMAIL,
-            Destination={"ToAddresses": [to_email]},
-            Message={
-                "Subject": {"Data": subject, "Charset": "UTF-8"},
-                "Body": {
-                    "Html": {"Data": html_body, "Charset": "UTF-8"},
-                },
-            },
-        )
-        return True
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status in (200, 201):
+                resp_body = json.loads(resp.read().decode("utf-8"))
+                logger.info(f"Check-in email sent via Resend to {to_email} (id: {resp_body.get('id')})")
+                return True
+            logger.error(f"Resend returned unexpected status code {resp.status}")
+            return False
+    except urllib.error.HTTPError as e:
+        error_content = e.read().decode("utf-8")
+        logger.error(f"Resend HTTP error {e.code} sending email to {to_email}: {error_content}")
+        return False
     except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {e}")
+        logger.error(f"Failed to send email via Resend to {to_email}: {e}")
         return False
 
 
